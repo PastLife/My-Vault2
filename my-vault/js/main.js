@@ -4,13 +4,17 @@ import { openIdbAdapter } from './core/storage/idb.js';
 import { createSession } from './core/session.js';
 import { startShell, showUnsupported } from './ui/shell.js';
 // โมดูลลงทะเบียนตัวเองตอน import — ลำดับ import = ลำดับในแถบล่าง
+import './modules/home/index.js';
+import './modules/projects/index.js';
+import './modules/money/index.js';
 import './modules/vault/index.js';
 
 const root = document.getElementById('app');
 
 // ---------- ใช้ออฟไลน์ + อัปเดตเวอร์ชัน ----------
 function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
+  // แบบไฟล์เดียว (เปิดจากเครื่อง / ลิงก์ Claude) ไม่มี sw.js ให้ลงทะเบียน
+  if (globalThis.MY_VAULT_SINGLE_FILE || !('serviceWorker' in navigator)) return;
   let userAskedUpdate = false;
 
   // เปลี่ยนตัวควบคุมได้ 2 กรณี: ติดตั้งครั้งแรก (ไม่ต้องทำอะไร) หรือผู้ใช้แตะอัปเดต (โหลดหน้าใหม่)

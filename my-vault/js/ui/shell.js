@@ -1,17 +1,29 @@
 // โครงหลักของแอป: หน้าต้อนรับ/ตั้งรหัส, หน้าล็อก, หัวจอ, แถบล่างสลับโมดูล, ตั้งค่า
 import { WrongPasswordError, BadBackupError, StorageFullError } from '../core/store.js';
 import {
-  h, clear, icon, openModal, closeAllModals, confirmModal, toast, copyText, objectUrl, revokeAllUrls,
+  h, clear, icon, openModal, closeAllModals, confirmModal, toast, copyText, objectUrl, revokeAllUrls, saveFile,
 } from './dom.js';
-import { passwordCheck, backupFileName, backupOverdue, formatWait, recoveryTailMatches } from './rules.js';
+import {
+  passwordCheck, backupFileName, backupOverdue, formatWait, recoveryTailMatches, tabbarLayout, clearAllExamples,
+} from './rules.js';
+import { vaultDoor } from './art.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const modules = [];
+const actions = new Map();
+const CENTER_ACTION = 'add-money';
 
-// โมดูลลงทะเบียนตัวเองก่อนเรียก startShell
-// { id, label, icon, mount(container, ctx), unmount(), seed?(ctx), settingsActions?: [{label, run(ctx)}] }
+// โมดูลลงทะเบียนตัวเองก่อนเรียก startShell — ลำดับลงทะเบียน = ลำดับในแถบล่าง และลำดับ seed
+// { id, label, icon, mount(container, ctx, params), unmount(), seed?(ctx), clearExamples?(ctx) → number,
+//   settingsActions?: [{label, run(ctx)}], onOpen?(ctx) → Promise<boolean> (true = ข้อมูลเปลี่ยน ให้วาดหน้าใหม่) }
 export function registerModule(mod) {
   modules.push(mod);
+}
+
+// งานที่เรียกได้จากทุกหน้า เช่น 'add-money' (ปุ่ม + กลางแถบล่าง)
+// { id, label, run(ctx, params) → Promise<boolean> }  true = มีข้อมูลเปลี่ยน → shell refresh หน้าปัจจุบัน
+export function registerAction(action) {
+  actions.set(action.id, action);
 }
 
 export function showUnsupported(root, reason = 'เบราว์เซอร์นี้ไม่รองรับการเข้ารหัสหรือการเก็บข้อมูลที่แอปต้องใช้') {
@@ -26,8 +38,22 @@ export function showUnsupported(root, reason = 'เบราว์เซอร�
 export async function startShell({ store, session, root }) {
   let current = null; // โมดูลที่เปิดอยู่
   let currentId = modules[0]?.id ?? null;
+  let currentParams = {};
 
-  const ctx = { store, session, toast, openModal, confirmModal, copyText, objectUrl, h, icon };
+  const ctx = {
+    store, session, toast, openModal, confirmModal, copyText, objectUrl, h, icon,
+    navigate: (id, params = {}) => mountModule(id, params),
+    refresh: () => { if (container && store.isUnlocked()) mountModule(currentId, currentParams); },
+    runAction,
+  };
+
+  async function runAction(id, params = {}) {
+    const action = actions.get(id);
+    if (!action || !store.isUnlocked()) return false;
+    const changed = await action.run(ctx, params);
+    if (changed) ctx.refresh();
+    return changed;
+  }
 
   session.onLock(() => {
     closeAllModals();
@@ -77,7 +103,7 @@ export async function startShell({ store, session, root }) {
     pw2.input.addEventListener('input', update);
 
     const form = h('form', {
-      class: 'card stack',
+      class: 'card gate',
       onsubmit: async e => {
         e.preventDefault();
         const r = passwordCheck(pw.input.value, pw2.input.value);
@@ -95,8 +121,10 @@ export async function startShell({ store, session, root }) {
         }
       },
     },
-      h('div', { class: 'seal', 'aria-hidden': 'true' }, 'MV'),
+      h('div', { class: 'hazard', 'aria-hidden': 'true' }),
+      h('span', { class: 'en' }, 'My Bunker · New vault'),
       h('h1', {}, 'สมุดข้อมูลส่วนตัว'),
+      vaultDoor(),
       h('ul', { class: 'facts' },
         h('li', {}, 'ข้อมูลเก็บในเครื่องนี้เท่านั้น ไม่ส่งไปที่ไหน'),
         h('li', {}, 'ทุกรายการและทุกรูปถูกเข้ารหัสด้วยรหัสผ่านของคุณ'),
@@ -127,7 +155,8 @@ export async function startShell({ store, session, root }) {
   }
 
   function showRecoveryStep(code) {
-    clear(root, h('main', { class: 'screen' }, h('div', { class: 'card' },
+    clear(root, h('main', { class: 'screen' }, h('div', { class: 'card gate' },
+      h('div', { class: 'hazard', 'aria-hidden': 'true' }),
       recoveryPanel(code, finishSetup, 'จดแล้ว เข้าสู่สมุด'))));
   }
 
@@ -149,6 +178,7 @@ export async function startShell({ store, session, root }) {
     const btn = h('button', { class: 'btn primary block', type: 'submit' }, 'ปลดล็อก');
     const modeLink = h('button', { class: 'link', type: 'button', onclick: () => setMode(!recovery) });
     const title = h('h1', {});
+    const door = vaultDoor();
 
     function setMode(r) {
       recovery = r;
@@ -175,7 +205,7 @@ export async function startShell({ store, session, root }) {
     }
 
     const form = h('form', {
-      class: 'card stack',
+      class: 'card gate',
       onsubmit: async e => {
         e.preventDefault();
         if (!pw.input.value) return;
@@ -185,8 +215,11 @@ export async function startShell({ store, session, root }) {
         btn.textContent = 'ปลดล็อก';
         if (r.ok) {
           clearInterval(timer);
-          if (recovery) setTimeout(() => toast('เปิดด้วยรหัสกู้คืนแล้ว แนะนำให้ตั้งรหัสผ่านใหม่ในหน้าตั้งค่า'), 300);
-          showApp();
+          if (recovery) setTimeout(() => toast('เปิดด้วยรหัสกู้คืนแล้ว แนะนำให้ตั้งรหัสผ่านใหม่ในหน้าตั้งค่า'), 900);
+          // หน้าปัดหมุนเปิดก่อนเข้าแอป (ปิดการเคลื่อนไหว = เข้าทันที)
+          const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+          door.classList.add('opening');
+          setTimeout(() => { if (store.isUnlocked()) showApp(); }, still ? 0 : 600);
           return;
         }
         pw.input.select();
@@ -197,9 +230,14 @@ export async function startShell({ store, session, root }) {
         }
       },
     },
-      h('div', { class: 'seal', 'aria-hidden': 'true' }, icon('lock')),
-      title, pw.el, msg, btn, modeLink,
+      h('div', { class: 'hazard', 'aria-hidden': 'true' }),
+      h('span', { class: 'en' }, 'My Bunker · Secure entry'),
+      title, door, pw.el, msg, btn, modeLink,
       h('button', { class: 'link danger', type: 'button', onclick: () => wipeDialog() }, 'ลืมทั้งสองอย่าง? เริ่มสมุดใหม่'),
+      h('div', { class: 'terminal', 'aria-hidden': 'true' },
+        h('span', {}, '> AES-256 ENCRYPTED STORAGE · ONLINE'),
+        h('span', {}, '> AUTO-LOCK 05:00 · OFFLINE READY'),
+        h('span', {}, '> AWAITING ACCESS CODE_')),
     );
     setMode(false);
     clear(root, h('main', { class: 'screen' }, form));
@@ -222,10 +260,11 @@ export async function startShell({ store, session, root }) {
     backupBar.hidden = false;
   }
 
-  function mountModule(id) {
+  function mountModule(id, params = {}) {
     unmountCurrent();
     revokeAllUrls();
     currentId = id;
+    currentParams = params;
     const mod = modules.find(m => m.id === id);
     for (const tab of root.querySelectorAll('.tabbar button')) {
       if (tab.dataset.id === id) tab.setAttribute('aria-current', 'page');
@@ -238,7 +277,8 @@ export async function startShell({ store, session, root }) {
     moduleTitle.textContent = mod.label;
     clear(container);
     current = mod;
-    mod.mount(container, ctx);
+    window.scrollTo?.(0, 0);
+    mod.mount(container, ctx, params);
   }
 
   function showApp() {
@@ -247,7 +287,7 @@ export async function startShell({ store, session, root }) {
     container = h('main', { class: 'module', id: 'module' });
     const header = h('header', { class: 'appbar' },
       h('div', { class: 'appbar-inner' },
-        h('div', { class: 'brand' }, h('span', { class: 'brand-name' }, 'My Vault'), moduleTitle),
+        h('div', { class: 'brand' }, h('span', { class: 'brand-name' }, 'My Bunker'), moduleTitle),
         h('button', { class: 'icon-btn labelled', type: 'button', onclick: openSettings, 'aria-label': 'ตั้งค่า' }, icon('gear'), h('span', {}, 'ตั้งค่า')),
         h('button', { class: 'icon-btn labelled', type: 'button', onclick: () => session.lockNow(), 'aria-label': 'ล็อก' }, icon('lock'), h('span', {}, 'ล็อก')),
       ),
@@ -255,26 +295,45 @@ export async function startShell({ store, session, root }) {
     );
     const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'โมดูล' },
       h('div', { class: 'tabbar-inner' },
-        modules.map(m => h('button', { type: 'button', 'data-id': m.id, onclick: () => mountModule(m.id) },
-          icon(m.icon), h('span', {}, m.label))),
+        tabbarLayout(modules, actions.has(CENTER_ACTION) ? CENTER_ACTION : null).map(item => {
+          if (item.kind === 'action') {
+            const a = actions.get(item.id);
+            return h('div', { class: 'fab-slot' }, h('button', {
+              type: 'button', class: 'fab', 'data-action': a.id, 'aria-label': a.label,
+              onclick: () => runAction(a.id, {}),
+            }, icon('plus')));
+          }
+          const m = modules.find(x => x.id === item.id);
+          return h('button', { type: 'button', 'data-id': m.id, onclick: () => mountModule(m.id) },
+            icon(m.icon), h('span', {}, m.label));
+        }),
       ),
     );
     clear(root, header, container, tabbar);
     mountModule(currentId ?? modules[0]?.id);
     refreshBackupBar();
+    runOnOpen();
   }
+
+  // งานของโมดูลตอนเปิดสมุด/กลับมาเปิดแอป (เช่น เติมรายการเงินทำซ้ำ) แล้ววาดหน้าปัจจุบันใหม่ถ้าข้อมูลเปลี่ยน
+  async function runOnOpen() {
+    let changed = false;
+    for (const m of modules) {
+      if (!m.onOpen || !store.isUnlocked()) continue;
+      try { changed = (await m.onOpen(ctx)) || changed; } catch (e) { console.error(e); }
+    }
+    if (changed && store.isUnlocked() && container?.isConnected) mountModule(currentId, currentParams);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && store.isUnlocked() && container?.isConnected) runOnOpen();
+  });
 
   // ---------- 4. สำรอง / กู้คืน ----------
   async function exportBackup() {
     try {
       const text = await store.exportBackup();
-      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-      const a = h('a', { href: url, download: backupFileName(new Date()), class: 'offscreen' });
-      document.body.append(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
-      toast('ส่งออกไฟล์สำรองแล้ว เก็บไฟล์ไว้นอกมือถือด้วยนะ');
+      if (!(await saveFile(backupFileName(new Date()), text))) { toast('ยกเลิกการบันทึกไฟล์'); return; }
+      toast('ส่งออกไฟล์สำรองแล้ว ส่งไฟล์นี้ไปอีกเครื่องเพื่อย้ายข้อมูลได้');
       refreshBackupBar();
     } catch (e) {
       console.error(e);
@@ -342,8 +401,9 @@ export async function startShell({ store, session, root }) {
         try {
           const r = await store.importBackup(await f.text(), impPw.input.value);
           impPw.input.value = '';
-          clear(impMsg, h('p', { class: 'ok' }, `นำเข้าแล้ว: เพิ่ม ${r.added} · อัปเดต ${r.updated} · ข้าม ${r.skipped} รายการ`));
-          mountModule(currentId);
+          const removed = r.removed ? ` · ลบตามอีกเครื่อง ${r.removed}` : '';
+          clear(impMsg, h('p', { class: 'ok' }, `นำเข้าแล้ว: เพิ่ม ${r.added} · อัปเดต ${r.updated} · ข้าม ${r.skipped}${removed} รายการ`));
+          mountModule(currentId, currentParams);
         } catch (err) {
           const text = err instanceof WrongPasswordError ? 'รหัสผ่านของไฟล์สำรองไม่ถูกต้อง'
             : err instanceof BadBackupError || err instanceof StorageFullError ? err.message
@@ -352,21 +412,34 @@ export async function startShell({ store, session, root }) {
           clear(impMsg, h('p', { class: 'error' }, text));
         }
       },
-    }, h('label', { class: 'field', for: 'import-file' }, h('span', { class: 'label' }, 'ไฟล์สำรอง (.myvault)'), file),
-    impPw.el, impMsg, h('button', { class: 'btn', type: 'submit' }, 'นำเข้า'));
+    }, h('label', { class: 'field', for: 'import-file' }, h('span', { class: 'label' }, 'ไฟล์สำรอง (.json)'), file),
+    impPw.el, impMsg, h('button', { class: 'btn', type: 'submit' }, 'รับข้อมูล'));
 
     const moduleActions = modules.flatMap(m => (m.settingsActions ?? []).map(a =>
       h('button', { class: 'btn', type: 'button', onclick: () => { modal.close(); a.run(ctx); } }, a.label)));
+    if (modules.some(m => m.clearExamples)) {
+      moduleActions.unshift(h('button', {
+        class: 'btn', type: 'button',
+        onclick: async () => {
+          if (!(await confirmModal('ลบข้อมูลตัวอย่างทั้งหมดทุกหน้า? ข้อมูลที่คุณเพิ่มเองจะยังอยู่', 'ลบตัวอย่าง'))) return;
+          const n = await clearAllExamples(modules, ctx);
+          modal.close();
+          toast(`ลบตัวอย่าง ${n} รายการแล้ว`);
+          ctx.refresh();
+        },
+      }, 'ลบข้อมูลตัวอย่างทั้งหมด'));
+    }
 
     const content = h('div', { class: 'settings' },
       h('div', { class: 'sheet-head' },
         h('h2', {}, 'ตั้งค่า'),
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'ปิด', onclick: () => modal.close() }, icon('close')),
       ),
-      h('section', { class: 'stack' }, h('h3', {}, 'สำรองข้อมูล'), lastLine,
-        h('p', { class: 'muted' }, 'ไฟล์สำรองยังเข้ารหัสอยู่ เปิดได้ด้วยรหัสผ่านปัจจุบันเท่านั้น'),
+      h('section', { class: 'stack' }, h('h3', {}, 'สำรอง / ส่งข้อมูลไปอีกเครื่อง'), lastLine,
+        h('p', { class: 'muted' }, 'ได้ไฟล์ .json ที่ยังเข้ารหัสอยู่ เปิดได้ด้วยรหัสผ่านปัจจุบันเท่านั้น ส่งต่อผ่านสาย USB, AirDrop, LINE หรือแฟลชไดรฟ์ได้ แล้วไปกด "รับข้อมูล" ที่อีกเครื่อง'),
         h('button', { class: 'btn primary', type: 'button', onclick: exportBackup }, 'ส่งออกไฟล์สำรอง')),
-      h('section', { class: 'stack' }, h('h3', {}, 'กู้คืนจากไฟล์สำรอง'), impForm),
+      h('section', { class: 'stack' }, h('h3', {}, 'รับข้อมูล / กู้คืนจากไฟล์สำรอง'),
+        h('p', { class: 'muted' }, 'รวมกับข้อมูลที่มีอยู่ ไม่เบิ้ล รายการเดียวกันจะเก็บฉบับที่แก้ล่าสุด'), impForm),
       h('section', { class: 'stack' }, h('h3', {}, 'เปลี่ยนรหัสผ่าน'), pwForm),
       h('section', { class: 'stack' }, h('h3', {}, 'รหัสกู้คืน'), recForm),
       moduleActions.length ? h('section', { class: 'stack' }, h('h3', {}, 'อื่นๆ'), moduleActions) : null,

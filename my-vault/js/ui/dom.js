@@ -39,6 +39,9 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  home: '<path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+  baht: '<path d="M8 4v16M8 5h5a3.5 3.5 0 0 1 0 7H8m0 0h6a4 4 0 0 1 0 8H8M11 2v3m0 14v3"/>',
   chevronLeft: '<path d="m15 18-6-6 6-6"/>',
   chevronRight: '<path d="m9 18 6-6-6-6"/>',
 };
@@ -122,6 +125,39 @@ export function toast(message) {
   toastTimer = setTimeout(() => { toastEl.hidden = true; }, 2400);
 }
 
+// ---------- บันทึกไฟล์ลงเครื่อง ----------
+// ในลิงก์ Claude: ใช้ downloads capability (ผู้ใช้กดยืนยันเอง) · เปิดเป็นไฟล์/เว็บปกติ: ใช้ <a download>
+// คืน true เมื่อส่งไฟล์ให้ผู้ใช้แล้ว, false เมื่อผู้ใช้ยกเลิก
+let downloadsNs;
+async function claudeDownloads() {
+  if (downloadsNs !== undefined) return downloadsNs;
+  downloadsNs = globalThis.claude?.use ? await globalThis.claude.use('downloads').catch(() => null) : null;
+  return downloadsNs;
+}
+
+export async function saveFile(filename, text, type = 'application/json') {
+  const blob = new Blob([text], { type });
+  const dl = await claudeDownloads();
+  if (dl) {
+    try {
+      await dl.save({ filename, data: blob });
+      return true;
+    } catch (e) {
+      if (e?.code === 'declined') return false;
+      if (e?.code === 'rate_limited') { toast('มีหน้าต่างบันทึกไฟล์เปิดอยู่แล้ว'); return false; }
+      console.warn('downloads:', e);
+      // ใช้ไม่ได้ในหน้านี้: ลองวิธีปกติต่อ
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: filename, class: 'offscreen' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return true;
+}
+
 // ---------- คัดลอก ----------
 export async function copyText(text) {
   try {
@@ -137,4 +173,9 @@ export async function copyText(text) {
   }
   toast('คัดลอกแล้ว');
   return true;
+}
+
+// ป้ายหัวข้อ: ภาษาอังกฤษตัวห่าง + คำไทยตัวปกติ (ห้ามถ่างตัวอักษรไทย)
+export function enLabel(en, th) {
+  return h('span', { class: 'section-label' }, h('span', { class: 'en' }, en), th ? h('span', { class: 'th' }, th) : null);
 }

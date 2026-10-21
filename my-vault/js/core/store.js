@@ -244,17 +244,21 @@ export function createStore(adapter, { kdfIterations = KDF_ITERATIONS, now = Dat
         blobsOf.get(b.recordId).push(b);
       }
 
-      const result = { added: 0, updated: 0, skipped: 0 };
+      // removed = รายการในเครื่องที่ถูกลบตามอีกเครื่อง
+      // ร่องรอยการลบที่ไม่กระทบอะไรในเครื่องนี้ ไม่นับ (ผู้ใช้ไม่เคยเห็นรายการนั้น)
+      const result = { added: 0, updated: 0, skipped: 0, removed: 0 };
       for (const r of backup.records) {
         const local = await adapter.getRecord(r.id);
-        if (local && local.updatedAt >= r.updatedAt) { result.skipped++; continue; }
 
         if (r.deleted) {
+          if (local && local.updatedAt >= r.updatedAt) continue;
           await guard(() => adapter.putRecord({ ...r, iv: null, ct: null }));
           await adapter.deleteBlobsFor(r.id);
-          if (local && !local.deleted) result.updated++; else result.skipped++;
+          if (local && !local.deleted) result.removed++;
           continue;
         }
+
+        if (local && local.updatedAt >= r.updatedAt) { result.skipped++; continue; }
 
         let fresh;
         try {

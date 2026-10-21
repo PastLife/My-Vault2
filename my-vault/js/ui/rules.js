@@ -16,7 +16,7 @@ export function passwordCheck(password, confirm) {
 
 export function backupFileName(date) {
   const p = n => String(n).padStart(2, '0');
-  return `my-vault-${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}.myvault`;
+  return `my-vault-${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}.json`;
 }
 
 export function backupOverdue(lastBackupAt, now) {
@@ -30,4 +30,20 @@ export function formatWait(ms) {
 export function recoveryTailMatches(code, input) {
   const typed = normalizeRecoveryCode(input);
   return typed.length === 4 && normalizeRecoveryCode(code).endsWith(typed);
+}
+
+// แถบล่าง: โมดูลตามลำดับ โดยแทรกปุ่มกลาง (action) หลังโมดูลที่ 2
+export function tabbarLayout(modules, actionId) {
+  const items = modules.map(m => ({ kind: 'module', id: m.id }));
+  if (actionId) items.splice(Math.min(2, items.length), 0, { kind: 'action', id: actionId });
+  return items;
+}
+
+// ลบข้อมูลตัวอย่างของทุกโมดูลตามลำดับ คืนจำนวนรวม
+export async function clearAllExamples(modules, ctx) {
+  let total = 0;
+  for (const m of modules) {
+    if (m.clearExamples) total += await m.clearExamples(ctx);
+  }
+  return total;
 }

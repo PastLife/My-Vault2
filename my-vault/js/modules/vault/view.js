@@ -5,6 +5,7 @@ import {
   CATEGORIES, MAX_IMAGES, categoryOf, emptyEntry, expiryDays, expiryAlerts, matches, EXPIRY_WARN_DAYS,
 } from './model.js';
 import { saveEntry, removeExamples, localToday, TooManyImagesError } from './actions.js';
+import { emptyArt } from '../../ui/art.js';
 
 const TYPE_LABELS = { text: 'ข้อความ', date: 'วันที่', secret: 'ลับ' };
 const EXPIRY_LABEL = /หมดอายุ|ครบกำหนด/;
@@ -111,6 +112,7 @@ export function createVaultView(container, ctx) {
       .sort((a, b) => b.updatedAt - a.updatedAt);
     if (!visible.length) {
       listBox.replaceChildren(h('div', { class: 'empty' },
+        emptyArt('vault'),
         query.trim() ? 'ไม่พบข้อมูลที่ค้นหา' : 'ยังไม่มีข้อมูลในหมวดนี้',
         query.trim() ? null : h('button', { class: 'btn', type: 'button', onclick: () => openEditor(null) }, icon('plus'), 'เพิ่มข้อมูลแรก'),
       ));

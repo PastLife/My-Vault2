@@ -1,7 +1,7 @@
 // ลงทะเบียนโมดูลสมุดกับโครงหลัก
 import { registerModule } from '../../ui/shell.js';
 import { createVaultView } from './view.js';
-import { seedSamples, importLegacyText, localToday } from './actions.js';
+import { seedSamples, importLegacyText, localToday, removeExamples } from './actions.js';
 
 let view = null;
 
@@ -48,5 +48,6 @@ registerModule({
   mount(container, ctx) { view = createVaultView(container, ctx); },
   unmount() { view?.destroy(); view = null; },
   seed(ctx) { return seedSamples(ctx.store, localToday()); },
+  clearExamples(ctx) { return removeExamples(ctx.store); },
   settingsActions: [{ label: 'นำเข้าจากเวอร์ชันแรก', run: openLegacyImport }],
 });

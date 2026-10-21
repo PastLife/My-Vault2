@@ -3,7 +3,7 @@
 //
 // ออกเวอร์ชันใหม่: เปลี่ยน VERSION → เบราว์เซอร์เห็นว่า sw.js เปลี่ยน → ดาวน์โหลดไฟล์ชุดใหม่ทั้งชุด
 // → แอปแสดงแถบ "มีเวอร์ชันใหม่" → ผู้ใช้แตะ → สลับไปชุดใหม่พร้อมกันทุกไฟล์
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `my-vault-${VERSION}`;
 
 const ASSETS = [
@@ -20,9 +20,21 @@ const ASSETS = [
   'js/core/store.js',
   'js/core/storage/idb.js',
   'js/core/storage/memory.js',
+  'js/domain/money.js',
+  'js/domain/projects.js',
+  'js/ui/art.js',
   'js/ui/dom.js',
   'js/ui/rules.js',
   'js/ui/shell.js',
+  'js/modules/home/index.js',
+  'js/modules/home/view.js',
+  'js/modules/money/actions.js',
+  'js/modules/money/index.js',
+  'js/modules/money/sheet.js',
+  'js/modules/money/view.js',
+  'js/modules/projects/actions.js',
+  'js/modules/projects/index.js',
+  'js/modules/projects/view.js',
   'js/modules/vault/actions.js',
   'js/modules/vault/index.js',
   'js/modules/vault/model.js',
